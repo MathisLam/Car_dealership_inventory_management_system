@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Dashboard (WIP v0.5)</h2>
+
+<h3>Add Vehicle</h3>
+<form action="{{ url_for('add_vehicle') }}" method="POST">
+    <input type="text" name="vin" placeholder="VIN Number" required>
+    <input type="text" name="make" placeholder="Make" required>
+    <input type="text" name="model" placeholder="Model" required>
+    <input type="number" name="year" placeholder="Year">
+    <input type="number" step="0.01" name="price" placeholder="Price HKD">
+    <button type="submit">Save Vehicle</button>
+</form>
+
+<hr>
+
+<h3>Current Inventory</h3>
+<table border="1" cellpadding="5">
+    <thead>
+        <tr>
+            <th>VIN</th>
+            <th>Make / Model</th>
+            <th>Year</th>
+            <th>Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for vehicle in vehicles %}
+        <tr>
+            <td>{{ vehicle.vin }}</td>
+            <td>{{ vehicle.make }} {{ vehicle.model }}</td>
+            <td>{{ vehicle.year }}</td>
+            <td>${{ vehicle.price }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No vehicles recorded yet.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Yat Chung System - DEV BUILD</title>
+</head>
+<body>
+    <div style="background: #e0e0e0; padding: 10px; margin-bottom: 20px;">
+        <strong>[DEV BUILD v0.5] Yat Chung Car Company HK</strong>
+        {% if current_user.is_authenticated %}
+            | Logged in as: <strong>{{ current_user.username }}</strong> ({{ current_user.role }})
+            | <a href="{{ url_for('logout') }}">Logout</a>
+        {% endif %}
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+        {% for message in messages %}
+          <li style="color: green;">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</body>
+</html>
