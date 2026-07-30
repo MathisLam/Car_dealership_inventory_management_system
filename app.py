@@ -1,26 +1,32 @@
 import os
-from flask import Flask, render_template, redirect, url_for, flash, request
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-
+# Initialize Flask App
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dev-key-yat-chung-temp-2026'
+
+# Basic Configuration
+app.config['SECRET_KEY'] = 'dev_super_secret_key'  # Change this in production
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dealership_dev.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Initialize Extensions
 db = SQLAlchemy(app)
-login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login' # Redirects to login route if unauthenticated
 
+# --- Database Models ---
 
 class User(UserMixin, db.Model):
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    # Target Roles: Super Admin, Owner, Co-owner, Senior Staff, Staff, Investor[cite: 1]
-    role = db.Column(db.String(20), nullable=False, default='Staff')
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    # Roles: Owner, Co-owners, Senior Staff, Staff, Fund Investors, Super Admin
+    role = db.Column(db.String(20), nullable=False, default='Staff') 
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -28,73 +34,65 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-
-class Vehicle(db.Model):
+class Inventory(db.Model):
+    __tablename__ = 'inventory'
     id = db.Column(db.Integer, primary_key=True)
-    vin = db.Column(db.String(17), unique=True, nullable=False)
     make = db.Column(db.String(50), nullable=False)
     model = db.Column(db.String(50), nullable=False)
     year = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=False)
+    vin = db.Column(db.String(17), unique=True, nullable=False)
     status = db.Column(db.String(20), default='Available')
+    price = db.Column(db.Float, nullable=False)
 
+class Customer(db.Model):
+    __tablename__ = 'customers'
+    id = db.Column(db.Integer, primary_key=True)
+    # Minimized fields for PDPO DPP1 Compliance
+    name = db.Column(db.String(100), nullable=False)
+    contact_number = db.Column(db.String(20), nullable=False)
+    vehicle_vin = db.Column(db.String(17), db.ForeignKey('inventory.vin'), nullable=False)
 
+class Task(db.Model):
+    __tablename__ = 'tasks'
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(200), nullable=False)
+    status = db.Column(db.String(20), default='Pending')
+    assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# --- Routes ---
 
+@app.route('/')
+def index():
+    # Redirect root to dashboard if logged in, else to login
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        
         user = User.query.filter_by(username=username).first()
-
+        
+        # Verify user and password
         if user and user.check_password(password):
             login_user(user)
+            # Log role assignment access
+            print(f"Logged in: {user.username} with role: {user.role}") 
             return redirect(url_for('dashboard'))
-        
-        flash('Invalid username or password.', 'error')
+        else:
+            flash('Invalid username or password.', 'error')
 
     return render_template('login.html')
-
-
-@app.route('/dashboard', methods=['GET'])
-@login_required
-def dashboard():
-    vehicles = Vehicle.query.all()
-    return render_template('dashboard.html', vehicles=vehicles)
-
-
-@app.route('/add_vehicle', methods=['POST'])
-@login_required
-def add_vehicle():
-    vin = request.form.get('vin')
-    make = request.form.get('make')
-    model = request.form.get('model')
-    year = request.form.get('year')
-    price = request.form.get('price')
-
-    if not vin or not make or not model or not year or not price:
-        flash('All vehicle fields are required.', 'error')
-        return redirect(url_for('dashboard'))
-
-    try:
-        year_value = int(year)
-        price_value = float(price)
-    except ValueError:
-        flash('Year must be an integer and price must be a number.', 'error')
-        return redirect(url_for('dashboard'))
-
-    vehicle = Vehicle(vin=vin, make=make, model=model, year=year_value, price=price_value)
-    db.session.add(vehicle)
-    db.session.commit()
-    flash('Vehicle added successfully.')
-    return redirect(url_for('dashboard'))
-
 
 @app.route('/logout')
 @login_required
@@ -102,26 +100,44 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-
-@app.route('/')
-def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
-
-
-def create_default_admin():
-    if not User.query.filter_by(username='admin').first():
-        admin = User(username='admin')
-        admin.set_password('admin')
-        db.session.add(admin)
-        db.session.commit()
-        print('Created default admin user: admin/admin')
-
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    # Fetch real data from the database
+    inventory_items = Inventory.query.all()
+    tasks = Task.query.filter_by(assigned_to=current_user.id).all()
+    
+    # Query for sold items specifically
+    sold_items = Inventory.query.filter_by(status='Sold').all()
+    
+    # Calculate stats dynamically
+    total_inventory = len(inventory_items)
+    active_tasks = len(tasks)
+    # Monthly sales: assuming status 'Sold'
+    monthly_sales = len(sold_items)
+    
+    return render_template(
+        'dashboard.html', 
+        user=current_user,
+        inventory=inventory_items,
+        sold_items=sold_items,  # Pass this variable to the template
+        tasks=tasks,
+        total_inventory=total_inventory,
+        active_tasks=active_tasks,
+        monthly_sales=monthly_sales
+    )
 
 if __name__ == '__main__':
+    # Initialize the database and create a default admin user on first run
     with app.app_context():
         db.create_all()
-        create_default_admin()
-
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        # Create a Super Admin if none exists for manual role allocation
+        if not User.query.filter_by(username='admin').first():
+            admin_user = User(username='admin', role='Super Admin')
+            admin_user.set_password('admin123') # Change default password immediately
+            db.session.add(admin_user)
+            db.session.commit()
+            print("Default admin created: admin / admin123")
+            
+    # Run the server
+    app.run(debug=True)
