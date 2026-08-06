@@ -8,7 +8,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 app = Flask(__name__)
 
 # Basic Configuration
-app.config['SECRET_KEY'] = 'dev_super_secret_key'  # Change this in production
+app.config['SECRET_KEY'] = 'dev_super_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dealership_dev.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -16,7 +16,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login' # Redirects to login route if unauthenticated
+login_manager.login_view = 'login'
 
 # --- Database Models ---
 
@@ -25,14 +25,26 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
-    # Roles: Owner, Co-owners, Senior Staff, Staff, Fund Investors, Super Admin
-    role = db.Column(db.String(20), nullable=False, default='Staff') 
+    # Roles defined by hierarchy: owner, co_owner, senior_staff, staff, investor, superadmin
+    role = db.Column(db.String(20), nullable=False, default='staff') 
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+class Customer(db.Model):
+    """
+    PDPO-Compliant Customer Model (DPP1).
+    Strictly limiting data fields to necessary transactional information.
+    """
+    __tablename__ = 'customers'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    contact_number = db.Column(db.String(20), nullable=False)
+    # Deliberately omitting excessive background info to ensure compliance with DPP1
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
 class Inventory(db.Model):
     __tablename__ = 'inventory'
@@ -43,14 +55,6 @@ class Inventory(db.Model):
     vin = db.Column(db.String(17), unique=True, nullable=False)
     status = db.Column(db.String(20), default='Available')
     price = db.Column(db.Float, nullable=False)
-
-class Customer(db.Model):
-    __tablename__ = 'customers'
-    id = db.Column(db.Integer, primary_key=True)
-    # Minimized fields for PDPO DPP1 Compliance
-    name = db.Column(db.String(100), nullable=False)
-    contact_number = db.Column(db.String(20), nullable=False)
-    vehicle_vin = db.Column(db.String(17), db.ForeignKey('inventory.vin'), nullable=False)
 
 class Task(db.Model):
     __tablename__ = 'tasks'
@@ -67,7 +71,6 @@ def load_user(user_id):
 
 @app.route('/')
 def index():
-    # Redirect root to dashboard if logged in, else to login
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
@@ -80,18 +83,12 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
         user = User.query.filter_by(username=username).first()
-        
-        # Verify user and password
         if user and user.check_password(password):
             login_user(user)
-            # Log role assignment access
-            print(f"Logged in: {user.username} with role: {user.role}") 
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password.', 'error')
-
     return render_template('login.html')
 
 @app.route('/logout')
@@ -100,44 +97,71 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/add-inventory', methods=['POST'])
+@login_required
+def add_inventory():
+    try:
+        new_item = Inventory(
+            make=request.form.get('make'),
+            model=request.form.get('model'),
+            year=int(request.form.get('year')),
+            vin=request.form.get('vin'),
+            price=float(request.form.get('price')),
+            status=request.form.get('status')
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        flash('Item added successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error adding item: {str(e)}', 'error')
+    return redirect(url_for('dashboard'))
+
+@app.route('/add-task', methods=['POST'])
+@login_required
+def add_task():
+    description = request.form.get('description')
+    if description:
+        new_task = Task(description=description, assigned_to=current_user.id)
+        db.session.add(new_task)
+        db.session.commit()
+        flash('Task added successfully!', 'success')
+    return redirect(url_for('dashboard'))
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Fetch real data from the database
-    inventory_items = Inventory.query.all()
+    # Sort inventory by ID descending (newest first)
+    inventory_items = Inventory.query.order_by(Inventory.id.desc()).all()
     tasks = Task.query.filter_by(assigned_to=current_user.id).all()
-    
-    # Query for sold items specifically
     sold_items = Inventory.query.filter_by(status='Sold').all()
-    
-    # Calculate stats dynamically
-    total_inventory = len(inventory_items)
-    active_tasks = len(tasks)
-    # Monthly sales: assuming status 'Sold'
-    monthly_sales = len(sold_items)
     
     return render_template(
         'dashboard.html', 
         user=current_user,
         inventory=inventory_items,
-        sold_items=sold_items,  # Pass this variable to the template
+        sold_items=sold_items,
         tasks=tasks,
-        total_inventory=total_inventory,
-        active_tasks=active_tasks,
-        monthly_sales=monthly_sales
+        total_inventory=len(inventory_items),
+        active_tasks=len(tasks),
+        monthly_sales=len(sold_items)
     )
 
-if __name__ == '__main__':
-    # Initialize the database and create a default admin user on first run
+# --- CLI Commands ---
+@app.cli.command("init-db")
+def init_db():
+    """Initialize the database and create a superadmin."""
     with app.app_context():
         db.create_all()
-        # Create a Super Admin if none exists for manual role allocation
         if not User.query.filter_by(username='admin').first():
-            admin_user = User(username='admin', role='Super Admin')
-            admin_user.set_password('admin123') # Change default password immediately
+            admin_user = User(username='admin', role='superadmin')
+            admin_user.set_password('admin123')
             db.session.add(admin_user)
             db.session.commit()
-            print("Default admin created: admin / admin123")
-            
-    # Run the server
+            print("Database initialized and 'admin' account created.")
+        else:
+            print("Database already initialized.")
+
+if __name__ == '__main__':
+    # Removed the auto-create_all() here to rely on the CLI command for better control
     app.run(debug=True)
