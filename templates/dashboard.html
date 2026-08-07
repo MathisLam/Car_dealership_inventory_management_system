@@ -70,14 +70,14 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 flex flex-col h-full overflow-hidden">
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative">
         
         <!-- Header (Numeric Informations & Account) -->
         <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center shadow-sm z-0">
             <!-- Numeric Informations -->
             <div class="flex gap-6 overflow-x-auto hide-scrollbar">
                 <div class="flex flex-col">
-                    <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Total Inventory</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Unsold Inventory</span>
                     <span class="text-xl font-extrabold text-gray-800 dark:text-white">{{ total_inventory }}</span>
                 </div>
                 <div class="w-px bg-gray-300 dark:bg-gray-600"></div>
@@ -87,7 +87,7 @@
                 </div>
                 <div class="w-px bg-gray-300 dark:bg-gray-600"></div>
                 <div class="flex flex-col">
-                    <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Monthly Sales</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Total Sold</span>
                     <span class="text-xl font-extrabold text-success">{{ monthly_sales }}</span>
                 </div>
             </div>
@@ -99,7 +99,6 @@
                 </button>
                 <div class="flex items-center gap-3 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
                     <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-inner">
-                        <!-- Fallback to 'U' if Jinja variable is not rendered -->
                         {{ user.username[0] | upper if user else 'U' }}
                     </div>
                     <div class="hidden sm:block text-sm">
@@ -142,7 +141,6 @@
                         </h2>
                     </div>
                     
-                    <!-- UPDATED FORM SECTION -->
                     <form action="{{ url_for('add_inventory') }}" method="POST" class="p-5 flex-1 flex flex-col gap-4">
                         <div class="grid grid-cols-2 gap-4">
                             <div>
@@ -182,7 +180,6 @@
                             <button type="submit" class="py-3 px-4 bg-primary hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all">Save Item</button>
                         </div>
                     </form>
-                    <!-- END OF FORM SECTION -->
                 </div>
 
                 <!-- Right Column: Info Cards & Tasks -->
@@ -192,14 +189,24 @@
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <!-- Notices -->
                         <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 rounded-2xl p-5 flex flex-col shadow-sm">
-                            <h3 class="font-bold text-yellow-800 dark:text-yellow-500 mb-4 flex items-center gap-2">
-                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
-                                System Notices
-                            </h3>
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold text-yellow-800 dark:text-yellow-500 flex items-center gap-2">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                    System Notices
+                                </h3>
+                                {% if user and user.role in ['owner', 'co_owner', 'senior_staff', 'superadmin'] %}
+                                <button onclick="openNoticeModal()" class="text-xs font-bold text-yellow-700 dark:text-yellow-400 hover:underline">
+                                    + Add
+                                </button>
+                                {% endif %}
+                            </div>
                             <ul class="space-y-3 flex-1 overflow-y-auto hide-scrollbar">
                                 {% if notices %}
                                     {% for notice in notices %}
-                                        <li class="text-sm bg-white dark:bg-gray-800/60 p-3 rounded-lg border border-yellow-100 dark:border-yellow-800/30">{{ notice.content }}</li>
+                                        <li class="text-sm bg-white dark:bg-gray-800/60 p-3 rounded-lg border border-yellow-100 dark:border-yellow-800/30">
+                                            {{ notice.content }}
+                                            <span class="block mt-1 text-xs text-gray-400">- {{ notice.author.username }}</span>
+                                        </li>
                                     {% endfor %}
                                 {% else %}
                                     <li class="text-sm text-gray-500 italic p-3">No new notices at this time.</li>
@@ -217,7 +224,23 @@
                                 {% for item in inventory[:5] %}
                                 <li class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-2">
                                     <span class="font-medium">{{ item.year }} {{ item.make }} {{ item.model }}</span>
-                                    <span class="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded">{{ item.status }}</span>
+                                    
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 px-2 py-1 rounded 
+                                            {% if item.status == 'Available' %} !bg-blue-100 !text-blue-800 dark:!bg-blue-900/30 dark:!text-blue-400 {% endif %}
+                                            {% if item.status == 'Reserved' %} !bg-orange-100 !text-orange-800 dark:!bg-orange-900/30 dark:!text-orange-400 {% endif %}">
+                                            {{ item.status }}
+                                        </span>
+                                        
+                                        <!-- Action button to mark as sold -->
+                                        {% if item.status != 'Sold' %}
+                                        <form action="{{ url_for('mark_sold', item_id=item.id) }}" method="POST" class="inline">
+                                            <button type="submit" class="text-gray-400 hover:text-success p-1 transition-colors" title="Mark as Sold">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
                                 </li>
                                 {% else %}
                                     <li class="text-sm text-gray-500 italic">No inventory records found.</li>
@@ -235,7 +258,7 @@
                                 {% for sale in sold_items[:5] %}
                                 <li class="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-700 pb-2">
                                     <span class="font-medium text-gray-500">{{ sale.year }} {{ sale.make }} {{ sale.model }}</span>
-                                    <span class="font-bold text-gray-700 dark:text-gray-300">HK${{ sale.price | int }}</span>
+                                    <span class="font-bold text-gray-700 dark:text-gray-300">HK${{ "{:,.0f}".format(sale.price) }}</span>
                                 </li>
                                 {% else %}
                                     <li class="text-sm text-gray-500 italic">No recent sales data.</li>
@@ -252,19 +275,23 @@
                         </div>
                         
                         <div class="p-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 overflow-y-auto hide-scrollbar">
-                            <!-- Dynamic Tasks Loop -->
+                            
+                            <!-- Dynamic Tasks Loop (Click to complete) -->
                             {% for task in tasks %}
-                            <div class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-2 hover:border-primary cursor-pointer transition-colors group">
-                                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <form action="{{ url_for('complete_task', task_id=task.id) }}" method="POST" class="relative bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-2 hover:border-success transition-all group cursor-pointer" onclick="this.submit()">
+                                <!-- Hover checkmark overlay -->
+                                <div class="absolute top-2 right-2 text-gray-300 dark:text-gray-600 group-hover:text-success transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                </div>
+                                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-primary flex items-center justify-center group-hover:bg-green-100 group-hover:text-success transition-colors">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                                 </div>
-                                <span class="text-sm font-semibold">{{ task.description }}</span>
-                                <span class="text-xs text-gray-500">{{ task.status }}</span>
-                            </div>
+                                <span class="text-sm font-semibold group-hover:text-success transition-colors">{{ task.description }}</span>
+                            </form>
                             {% endfor %}
                             
                             <!-- Add Process Button -->
-                            <div class="bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-2 hover:border-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors">
+                            <div onclick="openTaskModal()" class="bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 flex flex-col items-center justify-center text-center gap-2 hover:border-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-colors">
                                 <div class="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 flex items-center justify-center">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                                 </div>
@@ -277,6 +304,51 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Task Modal Overlay -->
+        <div id="task-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 transform transition-all">
+                <div class="flex justify-between items-center mb-5">
+                    <h3 class="text-lg font-bold text-gray-800 dark:text-white">Add New Task/Process</h3>
+                    <button onclick="closeTaskModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <form action="{{ url_for('add_task') }}" method="POST" class="flex flex-col gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Task Description</label>
+                        <input type="text" name="description" required placeholder="e.g. Wash the 2023 Camry" class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:outline-none transition-all dark:text-white">
+                    </div>
+                    <div class="flex justify-end gap-3 mt-2">
+                        <button type="button" onclick="closeTaskModal()" class="py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-xl font-bold transition-colors">Cancel</button>
+                        <button type="submit" class="py-2 px-4 bg-primary hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all">Save Task</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Notice Modal Overlay -->
+        <div id="notice-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 transform transition-all">
+                <div class="flex justify-between items-center mb-5">
+                    <h3 class="text-lg font-bold text-gray-800 dark:text-white">Post New System Notice</h3>
+                    <button onclick="closeNoticeModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <form action="{{ url_for('add_notice') }}" method="POST" class="flex flex-col gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Notice Content</label>
+                        <textarea name="content" required placeholder="Type the announcement here..." rows="3" class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:outline-none transition-all dark:text-white resize-none"></textarea>
+                    </div>
+                    <div class="flex justify-end gap-3 mt-2">
+                        <button type="button" onclick="closeNoticeModal()" class="py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-xl font-bold transition-colors">Cancel</button>
+                        <button type="submit" class="py-2 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/30 transition-all">Post Notice</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
     </main>
     
     <script>
@@ -286,7 +358,6 @@
         const lightIcon = document.getElementById('theme-icon-light');
         const themeText = document.getElementById('theme-text');
         
-        // Check local storage or system preference
         if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
             darkIcon.classList.remove('hidden');
@@ -297,11 +368,9 @@
         }
 
         themeToggleBtn.addEventListener('click', function() {
-            // Toggle icons
             darkIcon.classList.toggle('hidden');
             lightIcon.classList.toggle('hidden');
 
-            // If is dark mode
             if (document.documentElement.classList.contains('dark')) {
                 document.documentElement.classList.remove('dark');
                 localStorage.setItem('color-theme', 'light');
@@ -312,6 +381,24 @@
                 themeText.textContent = 'Light Mode';
             }
         });
+
+        // Task Modal Logic
+        const taskModal = document.getElementById('task-modal');
+        function openTaskModal() {
+            taskModal.classList.remove('hidden');
+        }
+        function closeTaskModal() {
+            taskModal.classList.add('hidden');
+        }
+
+        // Notice Modal Logic
+        const noticeModal = document.getElementById('notice-modal');
+        function openNoticeModal() {
+            noticeModal.classList.remove('hidden');
+        }
+        function closeNoticeModal() {
+            noticeModal.classList.add('hidden');
+        }
     </script>
 </body>
 </html>

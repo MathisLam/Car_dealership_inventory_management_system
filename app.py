@@ -172,6 +172,20 @@ def add_inventory():
         flash(f'Error adding item: {str(e)}', 'error')
     return redirect(url_for('dashboard'))
 
+@app.route('/mark-sold/<int:item_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def mark_sold(item_id):
+    item = Inventory.query.get_or_404(item_id)
+    item.status = 'Sold'
+    
+    log = AuditLog(user_id=current_user.id, action=f"Marked inventory {item.vin} as Sold")
+    db.session.add(log)
+    db.session.commit()
+    
+    flash(f'Vehicle {item.make} {item.model} marked as Sold!', 'success')
+    return redirect(url_for('dashboard'))
+
 @app.route('/add-task', methods=['POST'])
 @login_required
 @requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
@@ -186,6 +200,24 @@ def add_task():
         
         db.session.commit()
         flash('Task added successfully!', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/complete-task/<int:task_id>', methods=['POST'])
+@login_required
+def complete_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    # Ensure users can only complete their own tasks (unless they are higher ups)
+    if task.assigned_to == current_user.id or current_user.role in ['owner', 'co_owner', 'superadmin']:
+        task.status = 'Completed'
+        
+        log = AuditLog(user_id=current_user.id, action=f"Completed task ID {task.id}")
+        db.session.add(log)
+        db.session.commit()
+        
+        flash('Task marked as completed!', 'success')
+    else:
+        flash('You are not authorized to complete this task.', 'error')
+    
     return redirect(url_for('dashboard'))
 
 @app.route('/add-notice', methods=['POST'])
@@ -209,8 +241,9 @@ def add_notice():
 def dashboard():
     # Sort inventory by ID descending (newest first)
     inventory_items = Inventory.query.order_by(Inventory.id.desc()).all()
-    tasks = Task.query.filter_by(assigned_to=current_user.id).all()
-    sold_items = Inventory.query.filter_by(status='Sold').all()
+    # Only pull Active (Pending) tasks for the dashboard
+    tasks = Task.query.filter_by(assigned_to=current_user.id, status='Pending').all()
+    sold_items = Inventory.query.filter_by(status='Sold').order_by(Inventory.id.desc()).all()
     
     # Query newest 5 notices
     notices = Notice.query.order_by(Notice.created_at.desc()).limit(5).all()
@@ -222,7 +255,7 @@ def dashboard():
         sold_items=sold_items,
         tasks=tasks,
         notices=notices,
-        total_inventory=len(inventory_items),
+        total_inventory=len([i for i in inventory_items if i.status != 'Sold']), # Count only unsold
         active_tasks=len(tasks),
         monthly_sales=len(sold_items)
     )
