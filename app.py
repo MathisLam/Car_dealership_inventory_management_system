@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from functools import wraps
 
 # Initialize Flask App
 app = Flask(__name__)
@@ -63,9 +64,37 @@ class Task(db.Model):
     status = db.Column(db.String(20), default='Pending')
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
+class AuditLog(db.Model):
+    """
+    Tracks user actions to satisfy PDPO DPP4 (Security of Personal Data).
+    """
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    action = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# --- Custom RBAC Decorator ---
+def requires_roles(*roles):
+    """
+    Decorator to restrict access based on user roles.
+    Superadmins always have access.
+    """
+    def wrapper(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if current_user.role not in roles and current_user.role != 'superadmin':
+                flash('Access denied: You do not have the required permissions.', 'error')
+                return redirect(url_for('dashboard'))
+            return f(*args, **kwargs)
+        return wrapped
+    return wrapper
 
 # --- Routes ---
 
@@ -86,6 +115,12 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user)
+            
+            # Log the login action
+            log = AuditLog(user_id=user.id, action="Logged in")
+            db.session.add(log)
+            db.session.commit()
+            
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password.', 'error')
@@ -94,11 +129,17 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    # Log the logout action before destroying the session
+    log = AuditLog(user_id=current_user.id, action="Logged out")
+    db.session.add(log)
+    db.session.commit()
+    
     logout_user()
     return redirect(url_for('login'))
 
 @app.route('/add-inventory', methods=['POST'])
 @login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
 def add_inventory():
     try:
         new_item = Inventory(
@@ -110,6 +151,11 @@ def add_inventory():
             status=request.form.get('status')
         )
         db.session.add(new_item)
+        
+        # Log the inventory addition
+        log = AuditLog(user_id=current_user.id, action=f"Added inventory: {new_item.vin}")
+        db.session.add(log)
+        
         db.session.commit()
         flash('Item added successfully!', 'success')
     except Exception as e:
@@ -119,11 +165,16 @@ def add_inventory():
 
 @app.route('/add-task', methods=['POST'])
 @login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
 def add_task():
     description = request.form.get('description')
     if description:
         new_task = Task(description=description, assigned_to=current_user.id)
         db.session.add(new_task)
+        
+        log = AuditLog(user_id=current_user.id, action="Added a new task")
+        db.session.add(log)
+        
         db.session.commit()
         flash('Task added successfully!', 'success')
     return redirect(url_for('dashboard'))
