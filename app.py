@@ -64,6 +64,15 @@ class Task(db.Model):
     status = db.Column(db.String(20), default='Pending')
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
+class Notice(db.Model):
+    __tablename__ = 'notices'
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    author = db.relationship('User', backref=db.backref('notices', lazy=True))
+
 class AuditLog(db.Model):
     """
     Tracks user actions to satisfy PDPO DPP4 (Security of Personal Data).
@@ -179,6 +188,22 @@ def add_task():
         flash('Task added successfully!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/add-notice', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff') # Restricted to higher level staff
+def add_notice():
+    content = request.form.get('content')
+    if content:
+        new_notice = Notice(content=content, author_id=current_user.id)
+        db.session.add(new_notice)
+        
+        log = AuditLog(user_id=current_user.id, action="Added a system notice")
+        db.session.add(log)
+        
+        db.session.commit()
+        flash('Notice added successfully!', 'success')
+    return redirect(url_for('dashboard'))
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -187,12 +212,16 @@ def dashboard():
     tasks = Task.query.filter_by(assigned_to=current_user.id).all()
     sold_items = Inventory.query.filter_by(status='Sold').all()
     
+    # Query newest 5 notices
+    notices = Notice.query.order_by(Notice.created_at.desc()).limit(5).all()
+    
     return render_template(
         'dashboard.html', 
         user=current_user,
         inventory=inventory_items,
         sold_items=sold_items,
         tasks=tasks,
+        notices=notices,
         total_inventory=len(inventory_items),
         active_tasks=len(tasks),
         monthly_sales=len(sold_items)
@@ -214,5 +243,4 @@ def init_db():
             print("Database already initialized.")
 
 if __name__ == '__main__':
-    # Removed the auto-create_all() here to rely on the CLI command for better control
     app.run(debug=True)
