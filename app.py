@@ -236,6 +236,43 @@ def add_notice():
         flash('Notice added successfully!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/create-user', methods=['POST'])
+@login_required
+@requires_roles('owner', 'superadmin')
+def create_user():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    role = request.form.get('role')
+    
+    if User.query.filter_by(username=username).first():
+        flash('Username already exists.', 'error')
+        return redirect(url_for('dashboard'))
+        
+    new_user = User(username=username, role=role)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    
+    log = AuditLog(user_id=current_user.id, action=f"Created new user: {username} ({role})")
+    db.session.add(log)
+    db.session.commit()
+    
+    flash(f'User {username} created successfully!', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin/logs')
+@login_required
+@requires_roles('superadmin')
+def view_logs():
+    # Fetch the most recent 100 audit logs
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+    
+    # Log this admin access for security
+    access_log = AuditLog(user_id=current_user.id, action="Viewed system audit logs")
+    db.session.add(access_log)
+    db.session.commit()
+    
+    return render_template('logs.html', user=current_user, logs=logs)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
