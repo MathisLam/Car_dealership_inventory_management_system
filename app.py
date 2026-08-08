@@ -258,6 +258,42 @@ def create_user():
     
     flash(f'User {username} created successfully!', 'success')
     return redirect(url_for('dashboard'))
+    
+@app.route('/contacts')
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
+def contacts():
+    # Fetch all customers
+    customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    
+    # Log this access for DPP4 security compliance
+    access_log = AuditLog(user_id=current_user.id, action="Viewed the customer CRM list")
+    db.session.add(access_log)
+    db.session.commit()
+    
+    return render_template('contacts.html', user=current_user, customers=customers)
+
+@app.route('/add-contact', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
+def add_contact():
+    name = request.form.get('name')
+    contact_number = request.form.get('contact_number')
+    
+    if name and contact_number:
+        new_customer = Customer(name=name, contact_number=contact_number)
+        db.session.add(new_customer)
+        
+        # Log the addition
+        log = AuditLog(user_id=current_user.id, action=f"Added new customer contact: {name}")
+        db.session.add(log)
+        
+        db.session.commit()
+        flash(f'Client {name} successfully added to contacts!', 'success')
+    else:
+        flash('Both Name and Contact Number are required.', 'error')
+        
+    return redirect(url_for('contacts'))
 
 @app.route('/admin/logs')
 @login_required
