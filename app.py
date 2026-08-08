@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
+from flask import session as flask_session, request
+from flask_sqlalchemy import SQLAlchemy, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from functools import wraps
@@ -57,6 +58,7 @@ class Inventory(db.Model):
     status = db.Column(db.String(20), default='Available')
     price = db.Column(db.Float, nullable=False)
 
+
 class Task(db.Model):
     __tablename__ = 'tasks'
     id = db.Column(db.Integer, primary_key=True)
@@ -84,6 +86,39 @@ class AuditLog(db.Model):
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
+
+# --- Localization Dictionary ---
+TRANSLATIONS = {
+    'en': {
+        'dashboard': 'Dashboard',
+        'add_user': 'Add User',
+        'contacts': 'Contacts',
+        'logs': 'Logs',
+        'logout': 'Logout',
+        'unsold_inventory': 'Unsold Inventory',
+        'active_tasks': 'Active Tasks',
+        'total_sold': 'Total Sold',
+        'system_notices': 'System Notices',
+        'recent_inventory': 'Recent Inventory',
+        'recent_sales': 'Recent Sales',
+        'edit_create_item': 'Edit or Create Item'
+    },
+    'zh': {
+        'dashboard': '儀表板',
+        'add_user': '新增使用者',
+        'contacts': '聯絡客戶',
+        'logs': '系統日誌',
+        'logout': '登出',
+        'unsold_inventory': '未售庫存',
+        'active_tasks': '進行中任務',
+        'total_sold': '總銷量',
+        'system_notices': '系統公告',
+        'recent_inventory': '最新庫存',
+        'recent_sales': '最近售出',
+        'edit_create_item': '新增或編輯車輛'
+    }
+}
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -347,6 +382,22 @@ def init_db():
             print("Database initialized and 'admin' account created.")
         else:
             print("Database already initialized.")
+
+# --- Context Processor for Jinja ---
+@app.context_processor
+def inject_translations():
+    lang = flask_session.get('lang', 'en')
+    def t(key):
+        return TRANSLATIONS.get(lang, {}).get(key, key)
+    return dict(t=t, current_lang=lang)
+
+# --- Routes ---
+
+@app.route('/set-lang/<lang>')
+def set_lang(lang):
+    if lang in ['en', 'zh']:
+        flask_session['lang'] = lang
+    return redirect(request.referrer or url_for('dashboard'))
 
 if __name__ == '__main__':
     app.run(debug=True)

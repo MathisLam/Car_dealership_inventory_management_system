@@ -4,17 +4,17 @@
 <!-- Numeric Informations -->
 <div class="flex gap-6 overflow-x-auto hide-scrollbar">
     <div class="flex flex-col">
-        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Unsold Inventory</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">{{ t('unsold_inventory') }}</span>
         <span class="text-xl font-extrabold text-gray-800 dark:text-white">{{ total_inventory }}</span>
     </div>
     <div class="w-px bg-gray-300 dark:bg-gray-600"></div>
     <div class="flex flex-col">
-        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Active Tasks</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">{{ t('active_tasks') }}</span>
         <span class="text-xl font-extrabold text-warning">{{ active_tasks }}</span>
     </div>
     <div class="w-px bg-gray-300 dark:bg-gray-600"></div>
     <div class="flex flex-col">
-        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Total Sold</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">{{ t('total_sold') }}</span>
         <span class="text-xl font-extrabold text-success">{{ monthly_sales }}</span>
     </div>
 </div>
@@ -44,8 +44,8 @@
                 <div class="xl:col-span-1 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col">
                     <div class="p-5 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 rounded-t-2xl">
                         <h2 class="font-bold text-lg text-gray-800 dark:text-white flex items-center gap-2">
-                            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                            Edit or Create Item
+                            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                            {{ t('edit_create_item') }}
                         </h2>
                     </div>
                     
@@ -110,7 +110,7 @@
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="font-bold text-yellow-800 dark:text-yellow-500 flex items-center gap-2">
                                     <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
-                                    System Notices
+                                    {{ t('system_notices') }}
                                 </h3>
                                 {% if user and user.role in ['owner', 'co_owner', 'senior_staff', 'superadmin'] %}
                                 <button onclick="openNoticeModal()" class="text-xs font-bold text-yellow-700 dark:text-yellow-400 hover:underline">
@@ -136,7 +136,7 @@
                         <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 flex flex-col shadow-sm">
                             <h3 class="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                                 <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
-                                Recent Inventory
+                                {{ t('recent_inventory') }}
                             </h3>
                             <ul class="space-y-3">
                                 {% for item in inventory[:5] %}
@@ -170,7 +170,7 @@
                         <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 flex flex-col shadow-sm">
                             <h3 class="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                                 <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                Recent Sales
+                                {{ t('recent_sales') }}
                             </h3>
                             <ul class="space-y-3">
                                 {% for sale in sold_items[:5] %}
