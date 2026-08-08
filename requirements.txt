@@ -1,0 +1,4 @@
+Flask3.0.3
+Flask-SQLAlchemy3.1.1
+Flask-Login0.6.3
+Werkzeug3.0.3

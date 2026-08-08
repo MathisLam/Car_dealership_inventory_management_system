@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from functools import wraps
 
 # Initialize Flask App
 app = Flask(__name__)
@@ -63,9 +64,46 @@ class Task(db.Model):
     status = db.Column(db.String(20), default='Pending')
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
+class Notice(db.Model):
+    __tablename__ = 'notices'
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    author = db.relationship('User', backref=db.backref('notices', lazy=True))
+
+class AuditLog(db.Model):
+    """
+    Tracks user actions to satisfy PDPO DPP4 (Security of Personal Data).
+    """
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    action = db.Column(db.String(255), nullable=False)
+    timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# --- Custom RBAC Decorator ---
+def requires_roles(*roles):
+    """
+    Decorator to restrict access based on user roles.
+    Superadmins always have access.
+    """
+    def wrapper(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if current_user.role not in roles and current_user.role != 'superadmin':
+                flash('Access denied: You do not have the required permissions.', 'error')
+                return redirect(url_for('dashboard'))
+            return f(*args, **kwargs)
+        return wrapped
+    return wrapper
 
 # --- Routes ---
 
@@ -86,6 +124,12 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user)
+            
+            # Log the login action
+            log = AuditLog(user_id=user.id, action="Logged in")
+            db.session.add(log)
+            db.session.commit()
+            
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password.', 'error')
@@ -94,11 +138,17 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    # Log the logout action before destroying the session
+    log = AuditLog(user_id=current_user.id, action="Logged out")
+    db.session.add(log)
+    db.session.commit()
+    
     logout_user()
     return redirect(url_for('login'))
 
 @app.route('/add-inventory', methods=['POST'])
 @login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
 def add_inventory():
     try:
         new_item = Inventory(
@@ -110,6 +160,11 @@ def add_inventory():
             status=request.form.get('status')
         )
         db.session.add(new_item)
+        
+        # Log the inventory addition
+        log = AuditLog(user_id=current_user.id, action=f"Added inventory: {new_item.vin}")
+        db.session.add(log)
+        
         db.session.commit()
         flash('Item added successfully!', 'success')
     except Exception as e:
@@ -117,15 +172,68 @@ def add_inventory():
         flash(f'Error adding item: {str(e)}', 'error')
     return redirect(url_for('dashboard'))
 
+@app.route('/mark-sold/<int:item_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def mark_sold(item_id):
+    item = Inventory.query.get_or_404(item_id)
+    item.status = 'Sold'
+    
+    log = AuditLog(user_id=current_user.id, action=f"Marked inventory {item.vin} as Sold")
+    db.session.add(log)
+    db.session.commit()
+    
+    flash(f'Vehicle {item.make} {item.model} marked as Sold!', 'success')
+    return redirect(url_for('dashboard'))
+
 @app.route('/add-task', methods=['POST'])
 @login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
 def add_task():
     description = request.form.get('description')
     if description:
         new_task = Task(description=description, assigned_to=current_user.id)
         db.session.add(new_task)
+        
+        log = AuditLog(user_id=current_user.id, action="Added a new task")
+        db.session.add(log)
+        
         db.session.commit()
         flash('Task added successfully!', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/complete-task/<int:task_id>', methods=['POST'])
+@login_required
+def complete_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    # Ensure users can only complete their own tasks (unless they are higher ups)
+    if task.assigned_to == current_user.id or current_user.role in ['owner', 'co_owner', 'superadmin']:
+        task.status = 'Completed'
+        
+        log = AuditLog(user_id=current_user.id, action=f"Completed task ID {task.id}")
+        db.session.add(log)
+        db.session.commit()
+        
+        flash('Task marked as completed!', 'success')
+    else:
+        flash('You are not authorized to complete this task.', 'error')
+    
+    return redirect(url_for('dashboard'))
+
+@app.route('/add-notice', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff') # Restricted to higher level staff
+def add_notice():
+    content = request.form.get('content')
+    if content:
+        new_notice = Notice(content=content, author_id=current_user.id)
+        db.session.add(new_notice)
+        
+        log = AuditLog(user_id=current_user.id, action="Added a system notice")
+        db.session.add(log)
+        
+        db.session.commit()
+        flash('Notice added successfully!', 'success')
     return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
@@ -133,8 +241,12 @@ def add_task():
 def dashboard():
     # Sort inventory by ID descending (newest first)
     inventory_items = Inventory.query.order_by(Inventory.id.desc()).all()
-    tasks = Task.query.filter_by(assigned_to=current_user.id).all()
-    sold_items = Inventory.query.filter_by(status='Sold').all()
+    # Only pull Active (Pending) tasks for the dashboard
+    tasks = Task.query.filter_by(assigned_to=current_user.id, status='Pending').all()
+    sold_items = Inventory.query.filter_by(status='Sold').order_by(Inventory.id.desc()).all()
+    
+    # Query newest 5 notices
+    notices = Notice.query.order_by(Notice.created_at.desc()).limit(5).all()
     
     return render_template(
         'dashboard.html', 
@@ -142,7 +254,8 @@ def dashboard():
         inventory=inventory_items,
         sold_items=sold_items,
         tasks=tasks,
-        total_inventory=len(inventory_items),
+        notices=notices,
+        total_inventory=len([i for i in inventory_items if i.status != 'Sold']), # Count only unsold
         active_tasks=len(tasks),
         monthly_sales=len(sold_items)
     )
@@ -163,5 +276,4 @@ def init_db():
             print("Database already initialized.")
 
 if __name__ == '__main__':
-    # Removed the auto-create_all() here to rely on the CLI command for better control
     app.run(debug=True)
