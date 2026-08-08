@@ -259,6 +259,20 @@ def create_user():
     flash(f'User {username} created successfully!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/admin/logs')
+@login_required
+@requires_roles('superadmin')
+def view_logs():
+    # Fetch the most recent 100 audit logs
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(100).all()
+    
+    # Log this admin access for security
+    access_log = AuditLog(user_id=current_user.id, action="Viewed system audit logs")
+    db.session.add(access_log)
+    db.session.commit()
+    
+    return render_template('logs.html', user=current_user, logs=logs)
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
