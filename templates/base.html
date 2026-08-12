@@ -64,12 +64,11 @@
                 </button>
                 {% endif %}
 
+
                 {% if user and user.role != 'investor' %}
-                <a href="{{ url_for('contacts') }}" class="w-full flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-xl font-medium transition-colors border
-                    {% if request.endpoint == 'contacts' %} bg-blue-50 dark:bg-blue-900/30 text-primary border-blue-100 dark:border-blue-800 
-                    {% else %} border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 {% endif %}">
+                <a href="{{ url_for('customers') }}" class="w-full flex items-center justify-center md:justify-start gap-3 px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl font-medium transition-colors text-gray-600 dark:text-gray-300">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                    <span class="hidden md:inline">{{ t('contacts') }}</span>
+                    <span class="hidden md:inline">Contacts</span>
                 </a>
                 {% endif %}
 

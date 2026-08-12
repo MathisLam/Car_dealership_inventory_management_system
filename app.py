@@ -13,7 +13,7 @@ app = Flask(__name__)
 # Basic Configuration
 app.config['SECRET_KEY'] = 'dev_super_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dealership_dev.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_TRFACK_MODIFICATIONS'] = False
 
 # Initialize Extensions
 db = SQLAlchemy(app)
@@ -219,6 +219,65 @@ def mark_sold(item_id):
     
     flash(f'Vehicle {item.make} {item.model} marked as Sold!', 'success')
     return redirect(url_for('dashboard'))
+
+@app.route('/add-customer', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def add_customer():
+    name = request.form.get('name')
+    contact_number = request.form.get('contact_number')
+
+    if not name or not contact_number:
+        flash('Name and contact number are required.', 'error')
+        return redirect(url_for('customers'))
+
+    new_customer = Customer(name=name, contact_number=contact_number)
+    db.session.add(new_customer)
+
+    log = AuditLog(user_id=current_user.id, action=f"Added customer: {name}")
+    db.session.add(log)
+    db.session.commit()
+
+    flash('Customer added successfully!', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/edit-customer/<int:customer_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def edit_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    customer.name = request.form.get('name')
+    customer.contact_number = request.form.get('contact_number')
+
+    log = AuditLog(user_id=current_user.id, action=f"Edited customer ID {customer.id}")
+    db.session.add(log)
+    db.session.commit()
+
+    flash('Customer updated successfully!', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/delete-customer/<int:customer_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff')
+def delete_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    log = AuditLog(user_id=current_user.id, action=f"Deleted customer: {customer.name}")
+    db.session.add(log)
+    db.session.delete(customer)
+    db.session.commit()
+
+    flash('Customer deleted.', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/customers')
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def customers():
+    all_customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    return render_template('customers.html', user=current_user, customers=all_customers)
 
 @app.route('/add-task', methods=['POST'])
 @login_required
