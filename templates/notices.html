@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block header_content %}
+<h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+    <svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+    {{ t('notices_tab') }}
+</h2>
+<div class="flex items-center gap-3 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+    <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-inner">
+        {{ user.username[0] | upper if user else 'U' }}
+    </div>
+    <div class="hidden sm:block text-sm">
+        <p class="font-bold leading-tight">{{ user.username if user else 'Staff User' }}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 leading-tight">{{ user.role if user else 'Staff' }}</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto flex flex-col gap-6">
+    <div class="flex justify-between items-center">
+        <div>
+            <h3 class="text-lg font-bold text-gray-800 dark:text-white">Announcement History</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">View past and current system announcements.</p>
+        </div>
+        
+        {% if user and user.role in ['owner', 'co_owner', 'senior_staff', 'superadmin'] %}
+        <button onclick="openNoticeModal()" class="py-2 px-4 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-500 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 rounded-xl font-bold transition-colors shadow-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Post Notice
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm p-6">
+        <div class="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-200 dark:before:via-gray-700 before:to-transparent">
+            {% for notice in notices %}
+            <div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                <!-- Timeline marker -->
+                <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white dark:border-gray-900 bg-yellow-50 dark:bg-yellow-900/50 text-yellow-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+                </div>
+                <!-- Card -->
+                <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-gray-800 dark:text-gray-200">{{ notice.author.username }}</span>
+                        <span class="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded-full shadow-sm">{{ notice.timestamp.strftime('%b %d, %Y') }}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{{ notice.content }}</p>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-gray-500 dark:text-gray-400 italic">
+                No notices have been published to the system yet.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Notice Modal Overlay (Reusing same logic from dashboard) -->
+{% if user and user.role in ['owner', 'co_owner', 'senior_staff', 'superadmin'] %}
+<div id="notice-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 transform transition-all">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-white">Post New System Notice</h3>
+            <button onclick="closeNoticeModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <form action="{{ url_for('add_notice') }}" method="POST" class="flex flex-col gap-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Notice Content</label>
+                <textarea name="content" required placeholder="Type the announcement here..." rows="3" class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:outline-none transition-all dark:text-white resize-none"></textarea>
+            </div>
+            <div class="flex justify-end gap-3 mt-2">
+                <button type="button" onclick="closeNoticeModal()" class="py-2 px-4 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="submit" class="py-2 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl font-bold shadow-lg shadow-yellow-500/30 transition-all">Post Notice</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const noticeModal = document.getElementById('notice-modal');
+    function openNoticeModal() {
+        if(noticeModal) noticeModal.classList.remove('hidden');
+    }
+    function closeNoticeModal() {
+        if(noticeModal) noticeModal.classList.add('hidden');
+    }
+</script>
+{% endblock %}

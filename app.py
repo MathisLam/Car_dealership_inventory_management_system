@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask import session as flask_session, request
 from flask_sqlalchemy import SQLAlchemy, session
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from functools import wraps
@@ -67,12 +68,10 @@ class Task(db.Model):
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
 class Notice(db.Model):
-    __tablename__ = 'notices'
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(500), nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False) 
     author = db.relationship('User', backref=db.backref('notices', lazy=True))
 
 class AuditLog(db.Model):
@@ -261,14 +260,10 @@ def complete_task(task_id):
 def add_notice():
     content = request.form.get('content')
     if content:
-        new_notice = Notice(content=content, author_id=current_user.id)
+        new_notice = Notice(content=content, user_id=current_user.id)
         db.session.add(new_notice)
-        
-        log = AuditLog(user_id=current_user.id, action="Added a system notice")
-        db.session.add(log)
-        
         db.session.commit()
-        flash('Notice added successfully!', 'success')
+        flash("Notice posted successfully!", "success")
     return redirect(url_for('dashboard'))
 
 @app.route('/create-user', methods=['POST'])
@@ -354,7 +349,7 @@ def dashboard():
     sold_items = Inventory.query.filter_by(status='Sold').order_by(Inventory.id.desc()).all()
     
     # Query newest 5 notices
-    notices = Notice.query.order_by(Notice.created_at.desc()).limit(5).all()
+    notices = Notice.query.order_by(Notice.timestamp.desc()).limit(5).all()
     
     return render_template(
         'dashboard.html', 
@@ -398,6 +393,50 @@ def set_lang(lang):
     if lang in ['en', 'zh']:
         flask_session['lang'] = lang
     return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/inventory')
+def inventory():
+    try:
+        # 1. Check if user is logged in using Flask-Login
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        
+        # 2. Audit log for viewing inventory
+        new_log = AuditLog(user_id=current_user.id, action="Viewed full inventory directory")
+        db.session.add(new_log)
+        db.session.commit()
+        
+        # 3. Load data and render
+        inventory_items = Inventory.query.order_by(Inventory.id.desc()).all()
+        return render_template('inventory.html', user=current_user, inventory=inventory_items)
+        
+    except Exception as e:
+        print(f"🛑 INVENTORY ROUTE ERROR: {str(e)}")
+        flash(f"Could not load Inventory tab: {str(e)}", "error")
+        return redirect(url_for('dashboard'))
+
+
+@app.route('/notices')
+def system_notices():
+    try:
+        # 1. Check if user is logged in using Flask-Login
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        
+        # 2. Audit log for viewing notices
+        new_log = AuditLog(user_id=current_user.id, action="Viewed full system notices directory")
+        db.session.add(new_log)
+        db.session.commit()
+        
+        # 3. Load data and render
+        all_notices = Notice.query.order_by(Notice.timestamp.desc()).all()
+        return render_template('notices.html', user=current_user, notices=all_notices)
+        
+    except Exception as e:
+        print(f"🛑 NOTICES ROUTE ERROR: {str(e)}")
+        flash(f"Could not load Notices tab: {str(e)}", "error")
+        return redirect(url_for('dashboard'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)
