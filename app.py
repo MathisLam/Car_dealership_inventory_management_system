@@ -13,7 +13,7 @@ app = Flask(__name__)
 # Basic Configuration
 app.config['SECRET_KEY'] = 'dev_super_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dealership_dev.db'
-app.config['SQLALCHEMY_TRFACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize Extensions
 db = SQLAlchemy(app)
@@ -101,7 +101,9 @@ TRANSLATIONS = {
         'system_notices': 'System Notices',
         'recent_inventory': 'Recent Inventory',
         'recent_sales': 'Recent Sales',
-        'edit_create_item': 'Edit or Create Item'
+        'edit_create_item': 'Edit or Create Item',
+        'inventory_tab': 'Inventory',
+        'notices_tab': 'Notices'
     },
     'zh': {
         'dashboard': '儀表板',
@@ -115,7 +117,9 @@ TRANSLATIONS = {
         'system_notices': '系統公告',
         'recent_inventory': '最新庫存',
         'recent_sales': '最近售出',
-        'edit_create_item': '新增或編輯車輛'
+        'edit_create_item': '新增或編輯車輛',
+        'inventory_tab': '庫存',
+        'notices_tab': '公告'
     }
 }
 
@@ -277,6 +281,12 @@ def delete_customer(customer_id):
 @requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
 def customers():
     all_customers = Customer.query.order_by(Customer.created_at.desc()).all()
+
+    # Log this access for DPP4 security compliance (consistent with /inventory, /notices)
+    access_log = AuditLog(user_id=current_user.id, action="Viewed the customer contact list")
+    db.session.add(access_log)
+    db.session.commit()
+
     return render_template('customers.html', user=current_user, customers=all_customers)
 
 @app.route('/add-task', methods=['POST'])
@@ -348,42 +358,6 @@ def create_user():
     flash(f'User {username} created successfully!', 'success')
     return redirect(url_for('dashboard'))
     
-@app.route('/contacts')
-@login_required
-@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
-def contacts():
-    # Fetch all customers
-    customers = Customer.query.order_by(Customer.created_at.desc()).all()
-    
-    # Log this access for DPP4 security compliance
-    access_log = AuditLog(user_id=current_user.id, action="Viewed the customer CRM list")
-    db.session.add(access_log)
-    db.session.commit()
-    
-    return render_template('contacts.html', user=current_user, customers=customers)
-
-@app.route('/add-contact', methods=['POST'])
-@login_required
-@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
-def add_contact():
-    name = request.form.get('name')
-    contact_number = request.form.get('contact_number')
-    
-    if name and contact_number:
-        new_customer = Customer(name=name, contact_number=contact_number)
-        db.session.add(new_customer)
-        
-        # Log the addition
-        log = AuditLog(user_id=current_user.id, action=f"Added new customer contact: {name}")
-        db.session.add(log)
-        
-        db.session.commit()
-        flash(f'Client {name} successfully added to contacts!', 'success')
-    else:
-        flash('Both Name and Contact Number are required.', 'error')
-        
-    return redirect(url_for('contacts'))
-
 @app.route('/admin/logs')
 @login_required
 @requires_roles('superadmin')

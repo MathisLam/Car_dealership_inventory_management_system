@@ -1,102 +1,26 @@
 {% extends "base.html" %}
 
 {% block content %}
-<style>
-    body {
-        margin: 0;
-        padding: 0;
-    }
-    .login-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background-color: #f4f7f6; /* Neutral sophisticated palette */
-        font-family: sans-serif;
-    }
-    .login-card {
-        background: white;
-        padding: 40px;
-        border-radius: 12px; /* Rounded corners */
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* Visual depth */
-        width: 100%;
-        max-width: 400px;
-        text-align: center;
-    }
-    .login-card h2 {
-        margin-bottom: 20px;
-        color: #333;
-    }
-    
-    .form-group {
-        margin-bottom: 20px;
-        text-align: left;
-    }
-    .form-group label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: bold;
-        color: #555;
-    }
-    .form-group input {
-        width: 100%;
-        padding: 12px;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        box-sizing: border-box; /* Ensures padding doesn't affect width */
-        font-size: 16px;
-    }
-    .login-btn {
-        width: 100%;
-        padding: 15px; /* Large button size */
-        background-color: #0056b3; /* Bold color for visibility */
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-size: 18px;
-        font-weight: bold;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-    }
-    .login-btn:hover {
-        background-color: #004494;
-    }
-    .flash-message {
-        color: #d9534f;
-        background-color: #f2dede;
-        border: 1px solid #ebccd1;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 20px;
-    }
-</style>
+<div class="h-full w-full flex items-center justify-center">
+    <div class="w-full max-w-sm bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-8">
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-12 h-12 bg-primary text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-md mb-3">YC</div>
+            <h1 class="font-bold text-lg text-gray-800 dark:text-white">Yat Chung Car Co.</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">System Login</p>
+        </div>
 
-<div class="login-container">
-    <div class="login-card">
-        <h2>System Login</h2>
-        
-        <!-- Display Flash Messages for Errors -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-message">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <!-- Login Form POSTs to the /login route in app.py -->
-        <form method="POST" action="{{ url_for('login') }}">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required placeholder="Enter your username">
+        <form method="POST" action="{{ url_for('login') }}" class="flex flex-col gap-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Username</label>
+                <input type="text" name="username" required placeholder="Enter your username"
+                    class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:outline-none transition-all dark:text-white">
             </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Enter your password">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                <input type="password" name="password" required placeholder="Enter your password"
+                    class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary focus:outline-none transition-all dark:text-white">
             </div>
-            
-            <button type="submit" class="login-btn">Log In</button>
+            <button type="submit" class="mt-2 py-3 px-4 bg-primary hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all">Log In</button>
         </form>
     </div>
 </div>
