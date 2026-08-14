@@ -1,6 +1,8 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
+from flask import session as flask_session, request
+from flask_sqlalchemy import SQLAlchemy, session
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from functools import wraps
@@ -11,7 +13,7 @@ app = Flask(__name__)
 # Basic Configuration
 app.config['SECRET_KEY'] = 'dev_super_secret_key'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dealership_dev.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_TRFACK_MODIFICATIONS'] = False
 
 # Initialize Extensions
 db = SQLAlchemy(app)
@@ -57,6 +59,7 @@ class Inventory(db.Model):
     status = db.Column(db.String(20), default='Available')
     price = db.Column(db.Float, nullable=False)
 
+
 class Task(db.Model):
     __tablename__ = 'tasks'
     id = db.Column(db.Integer, primary_key=True)
@@ -65,12 +68,10 @@ class Task(db.Model):
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
 class Notice(db.Model):
-    __tablename__ = 'notices'
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(500), nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False) 
     author = db.relationship('User', backref=db.backref('notices', lazy=True))
 
 class AuditLog(db.Model):
@@ -84,6 +85,39 @@ class AuditLog(db.Model):
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     user = db.relationship('User', backref=db.backref('audit_logs', lazy=True))
+
+
+# --- Localization Dictionary ---
+TRANSLATIONS = {
+    'en': {
+        'dashboard': 'Dashboard',
+        'add_user': 'Add User',
+        'contacts': 'Contacts',
+        'logs': 'Logs',
+        'logout': 'Logout',
+        'unsold_inventory': 'Unsold Inventory',
+        'active_tasks': 'Active Tasks',
+        'total_sold': 'Total Sold',
+        'system_notices': 'System Notices',
+        'recent_inventory': 'Recent Inventory',
+        'recent_sales': 'Recent Sales',
+        'edit_create_item': 'Edit or Create Item'
+    },
+    'zh': {
+        'dashboard': '儀表板',
+        'add_user': '新增使用者',
+        'contacts': '聯絡客戶',
+        'logs': '系統日誌',
+        'logout': '登出',
+        'unsold_inventory': '未售庫存',
+        'active_tasks': '進行中任務',
+        'total_sold': '總銷量',
+        'system_notices': '系統公告',
+        'recent_inventory': '最新庫存',
+        'recent_sales': '最近售出',
+        'edit_create_item': '新增或編輯車輛'
+    }
+}
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -186,6 +220,65 @@ def mark_sold(item_id):
     flash(f'Vehicle {item.make} {item.model} marked as Sold!', 'success')
     return redirect(url_for('dashboard'))
 
+@app.route('/add-customer', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def add_customer():
+    name = request.form.get('name')
+    contact_number = request.form.get('contact_number')
+
+    if not name or not contact_number:
+        flash('Name and contact number are required.', 'error')
+        return redirect(url_for('customers'))
+
+    new_customer = Customer(name=name, contact_number=contact_number)
+    db.session.add(new_customer)
+
+    log = AuditLog(user_id=current_user.id, action=f"Added customer: {name}")
+    db.session.add(log)
+    db.session.commit()
+
+    flash('Customer added successfully!', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/edit-customer/<int:customer_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def edit_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    customer.name = request.form.get('name')
+    customer.contact_number = request.form.get('contact_number')
+
+    log = AuditLog(user_id=current_user.id, action=f"Edited customer ID {customer.id}")
+    db.session.add(log)
+    db.session.commit()
+
+    flash('Customer updated successfully!', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/delete-customer/<int:customer_id>', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff')
+def delete_customer(customer_id):
+    customer = Customer.query.get_or_404(customer_id)
+    log = AuditLog(user_id=current_user.id, action=f"Deleted customer: {customer.name}")
+    db.session.add(log)
+    db.session.delete(customer)
+    db.session.commit()
+
+    flash('Customer deleted.', 'success')
+    return redirect(url_for('customers'))
+
+
+@app.route('/customers')
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
+def customers():
+    all_customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    return render_template('customers.html', user=current_user, customers=all_customers)
+
 @app.route('/add-task', methods=['POST'])
 @login_required
 @requires_roles('owner', 'co_owner', 'senior_staff', 'staff')
@@ -226,14 +319,10 @@ def complete_task(task_id):
 def add_notice():
     content = request.form.get('content')
     if content:
-        new_notice = Notice(content=content, author_id=current_user.id)
+        new_notice = Notice(content=content, user_id=current_user.id)
         db.session.add(new_notice)
-        
-        log = AuditLog(user_id=current_user.id, action="Added a system notice")
-        db.session.add(log)
-        
         db.session.commit()
-        flash('Notice added successfully!', 'success')
+        flash("Notice posted successfully!", "success")
     return redirect(url_for('dashboard'))
 
 @app.route('/create-user', methods=['POST'])
@@ -258,6 +347,42 @@ def create_user():
     
     flash(f'User {username} created successfully!', 'success')
     return redirect(url_for('dashboard'))
+    
+@app.route('/contacts')
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
+def contacts():
+    # Fetch all customers
+    customers = Customer.query.order_by(Customer.created_at.desc()).all()
+    
+    # Log this access for DPP4 security compliance
+    access_log = AuditLog(user_id=current_user.id, action="Viewed the customer CRM list")
+    db.session.add(access_log)
+    db.session.commit()
+    
+    return render_template('contacts.html', user=current_user, customers=customers)
+
+@app.route('/add-contact', methods=['POST'])
+@login_required
+@requires_roles('owner', 'co_owner', 'senior_staff', 'staff', 'superadmin')
+def add_contact():
+    name = request.form.get('name')
+    contact_number = request.form.get('contact_number')
+    
+    if name and contact_number:
+        new_customer = Customer(name=name, contact_number=contact_number)
+        db.session.add(new_customer)
+        
+        # Log the addition
+        log = AuditLog(user_id=current_user.id, action=f"Added new customer contact: {name}")
+        db.session.add(log)
+        
+        db.session.commit()
+        flash(f'Client {name} successfully added to contacts!', 'success')
+    else:
+        flash('Both Name and Contact Number are required.', 'error')
+        
+    return redirect(url_for('contacts'))
 
 @app.route('/admin/logs')
 @login_required
@@ -283,7 +408,7 @@ def dashboard():
     sold_items = Inventory.query.filter_by(status='Sold').order_by(Inventory.id.desc()).all()
     
     # Query newest 5 notices
-    notices = Notice.query.order_by(Notice.created_at.desc()).limit(5).all()
+    notices = Notice.query.order_by(Notice.timestamp.desc()).limit(5).all()
     
     return render_template(
         'dashboard.html', 
@@ -311,6 +436,66 @@ def init_db():
             print("Database initialized and 'admin' account created.")
         else:
             print("Database already initialized.")
+
+# --- Context Processor for Jinja ---
+@app.context_processor
+def inject_translations():
+    lang = flask_session.get('lang', 'en')
+    def t(key):
+        return TRANSLATIONS.get(lang, {}).get(key, key)
+    return dict(t=t, current_lang=lang)
+
+# --- Routes ---
+
+@app.route('/set-lang/<lang>')
+def set_lang(lang):
+    if lang in ['en', 'zh']:
+        flask_session['lang'] = lang
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/inventory')
+def inventory():
+    try:
+        # 1. Check if user is logged in using Flask-Login
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        
+        # 2. Audit log for viewing inventory
+        new_log = AuditLog(user_id=current_user.id, action="Viewed full inventory directory")
+        db.session.add(new_log)
+        db.session.commit()
+        
+        # 3. Load data and render
+        inventory_items = Inventory.query.order_by(Inventory.id.desc()).all()
+        return render_template('inventory.html', user=current_user, inventory=inventory_items)
+        
+    except Exception as e:
+        print(f"🛑 INVENTORY ROUTE ERROR: {str(e)}")
+        flash(f"Could not load Inventory tab: {str(e)}", "error")
+        return redirect(url_for('dashboard'))
+
+
+@app.route('/notices')
+def system_notices():
+    try:
+        # 1. Check if user is logged in using Flask-Login
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        
+        # 2. Audit log for viewing notices
+        new_log = AuditLog(user_id=current_user.id, action="Viewed full system notices directory")
+        db.session.add(new_log)
+        db.session.commit()
+        
+        # 3. Load data and render
+        all_notices = Notice.query.order_by(Notice.timestamp.desc()).all()
+        return render_template('notices.html', user=current_user, notices=all_notices)
+        
+    except Exception as e:
+        print(f"🛑 NOTICES ROUTE ERROR: {str(e)}")
+        flash(f"Could not load Notices tab: {str(e)}", "error")
+        return redirect(url_for('dashboard'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)

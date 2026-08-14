@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block header_content %}
+<h2 class="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+    <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+    Client CRM
+</h2>
+<div class="flex items-center gap-3 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+    <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-bold shadow-inner">
+        {{ user.username[0] | upper if user else 'U' }}
+    </div>
+    <div class="hidden sm:block text-sm">
+        <p class="font-bold leading-tight">{{ user.username if user else 'Staff User' }}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 leading-tight">{{ user.role if user else 'Staff' }}</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 h-full">
+<!-- ... existing code ... -->
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                {% for customer in customers %}
+                                <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
+                                    <td class="py-4 px-6 text-sm font-medium text-gray-800 dark:text-gray-200">
+                                        {{ customer.name }}
+                                    </td>
+                                    <td class="py-4 px-6 text-sm text-gray-600 dark:text-gray-400">
+                                        {{ customer.contact_number }}
+                                    </td>
+                                    <td class="py-4 px-6 text-sm text-gray-500 dark:text-gray-400 text-right">
+                                        {{ customer.created_at.strftime('%Y-%m-%d') }}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="py-12 text-center text-gray-500 dark:text-gray-400 italic">
+                                        No client records found in the system.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+{% endblock %}
