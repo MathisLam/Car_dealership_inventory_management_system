@@ -208,7 +208,7 @@ def add_inventory():
     except Exception as e:
         db.session.rollback()
         flash(f'Error adding item: {str(e)}', 'error')
-    return redirect(url_for('dashboard'))
+    return redirect(request.referrer or url_for('dashboard'))
 
 @app.route('/mark-sold/<int:item_id>', methods=['POST'])
 @login_required
